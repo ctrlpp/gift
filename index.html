@@ -1,0 +1,1098 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Gift For You</title>
+    <style>
+        :root {
+            --bg-dark: #0b1020;
+            --bg-deep: #12162c;
+            --bg-purple: #8f7cff;
+            --bg-pink: #d7a5ff;
+            --glass-white: rgba(255, 255, 255, 0.15);
+            --glass-blue-border: rgba(173, 216, 255, 0.34);
+            --glass-shadow: 0 24px 60px rgba(8, 10, 24, 0.45);
+            --glass-highlight: rgba(255, 255, 255, 0.28);
+            --text-main: rgba(245, 247, 255, 0.96);
+            --text-subtle: rgba(214, 220, 255, 0.72);
+            --track-bg: rgba(255, 255, 255, 0.08);
+            --card-radius: 28px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background:
+                radial-gradient(circle at 18% 18%, rgba(189, 146, 255, 0.34), transparent 26%),
+                radial-gradient(circle at 82% 22%, rgba(115, 147, 255, 0.26), transparent 30%),
+                radial-gradient(circle at 50% 100%, rgba(255, 170, 221, 0.14), transparent 35%),
+                linear-gradient(145deg, #090d18 0%, #10162b 42%, #17102b 100%);
+            color: var(--text-main);
+            user-select: none;
+        }
+
+        body::before,
+        body::after {
+            content: "";
+            position: fixed;
+            inset: auto;
+            border-radius: 999px;
+            filter: blur(16px);
+            pointer-events: none;
+            opacity: 0.7;
+        }
+
+        body::before {
+            width: 36vw;
+            height: 36vw;
+            min-width: 220px;
+            min-height: 220px;
+            top: -10vw;
+            right: -6vw;
+            background: radial-gradient(circle, rgba(173, 132, 255, 0.45) 0%, rgba(173, 132, 255, 0) 70%);
+        }
+
+        body::after {
+            width: 42vw;
+            height: 42vw;
+            min-width: 260px;
+            min-height: 260px;
+            bottom: -14vw;
+            left: -10vw;
+            background: radial-gradient(circle, rgba(104, 180, 255, 0.24) 0%, rgba(104, 180, 255, 0) 74%);
+        }
+
+        .ambient-grid {
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+            background-size: 24px 24px;
+            mask-image: radial-gradient(circle at center, rgba(0, 0, 0, 0.9), transparent 88%);
+            pointer-events: none;
+            opacity: 0.5;
+        }
+
+        .screen {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 24px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.45s ease;
+            z-index: 1;
+        }
+
+        .screen.active {
+            opacity: 1;
+            pointer-events: auto;
+            z-index: 10;
+        }
+
+        .glass-stack {
+            position: relative;
+            width: min(100%, 440px);
+        }
+
+        .glass-stack::before,
+        .glass-stack::after {
+            content: "";
+            position: absolute;
+            inset: 18px -18px -18px 18px;
+            border-radius: calc(var(--card-radius) + 10px);
+            background: linear-gradient(160deg, rgba(255, 255, 255, 0.08), rgba(114, 138, 255, 0.03));
+            border: 1px solid rgba(173, 216, 255, 0.14);
+            box-shadow: 0 18px 45px rgba(6, 8, 16, 0.26);
+            z-index: -2;
+        }
+
+        .glass-stack::after {
+            inset: 32px -32px -32px 32px;
+            opacity: 0.55;
+            z-index: -3;
+        }
+
+        .glass-card {
+            position: relative;
+            overflow: hidden;
+            border-radius: var(--card-radius);
+            background:
+                linear-gradient(135deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.06)),
+                rgba(255, 255, 255, 0.15);
+            border: 1px solid var(--glass-blue-border);
+            box-shadow: var(--glass-shadow);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+
+        .glass-card::before {
+            content: "";
+            position: absolute;
+            inset: 1px;
+            border-radius: inherit;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            pointer-events: none;
+        }
+
+        .glass-card::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0) 42%);
+            opacity: 0.45;
+            pointer-events: none;
+        }
+
+        .card-content {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            padding: 28px;
+        }
+
+        .top-line {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-chip,
+        .status-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 34px;
+            padding: 0 14px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(200, 226, 255, 0.22);
+            color: var(--text-subtle);
+            font-size: 12px;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+        }
+
+        .brand-chip::before,
+        .status-chip::before {
+            content: "";
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #ccbeff, #8bd2ff);
+            box-shadow: 0 0 16px rgba(139, 210, 255, 0.56);
+        }
+
+        .title-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .title-group h1 {
+            font-size: clamp(28px, 5vw, 42px);
+            font-weight: 600;
+            letter-spacing: 0.02em;
+        }
+
+        .title-group p {
+            color: var(--text-subtle);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .glass-form {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .glass-field {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            min-height: 56px;
+            padding: 0 18px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(196, 215, 255, 0.2);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        }
+
+        .glass-field .field-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, rgba(212, 193, 255, 0.95), rgba(145, 214, 255, 0.92));
+            box-shadow: 0 0 16px rgba(144, 205, 255, 0.45);
+            flex-shrink: 0;
+        }
+
+        .glass-field input {
+            width: 100%;
+            border: 0;
+            outline: none;
+            background: transparent;
+            color: rgba(240, 244, 255, 0.95);
+            font-size: 15px;
+            letter-spacing: 0.03em;
+            pointer-events: none;
+        }
+
+        .glass-field input::placeholder {
+            color: rgba(225, 231, 255, 0.7);
+        }
+
+        .progress-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .progress-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .progress-label {
+            color: var(--text-subtle);
+            font-size: 13px;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+        }
+
+        .progress-text {
+            color: rgba(255, 255, 255, 0.96);
+            font-size: 18px;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .progress-bar-container {
+            position: relative;
+            width: 100%;
+            height: 12px;
+            overflow: hidden;
+            border-radius: 999px;
+            background: var(--track-bg);
+            border: 1px solid rgba(214, 233, 255, 0.14);
+            box-shadow: inset 0 1px 6px rgba(0, 0, 0, 0.2);
+        }
+
+        .progress-bar-fill {
+            position: relative;
+            height: 100%;
+            width: 0%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #a88bff 0%, #c7aaff 42%, #84d6ff 100%);
+            box-shadow: 0 0 22px rgba(149, 214, 255, 0.38);
+            transition: width 0.1s linear;
+        }
+
+        .progress-bar-fill::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 36px;
+            height: 100%;
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.55));
+            filter: blur(4px);
+        }
+
+        .error-message {
+            display: none;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        .error-text {
+            color: rgba(255, 229, 239, 0.95);
+            line-height: 1.7;
+            font-size: 14px;
+        }
+
+        .retry-btn {
+            min-height: 54px;
+            border: 0;
+            border-radius: 18px;
+            color: #fff;
+            font-size: 15px;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            cursor: pointer;
+            background:
+                linear-gradient(135deg, rgba(171, 143, 255, 0.88), rgba(113, 188, 255, 0.88));
+            box-shadow: 0 14px 30px rgba(76, 119, 255, 0.28);
+            transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+        }
+
+        .retry-btn:hover,
+        .retry-btn:focus-visible {
+            transform: translateY(-1px);
+            box-shadow: 0 16px 34px rgba(76, 119, 255, 0.34);
+            outline: none;
+        }
+
+        .card-divider {
+            height: 1px;
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(210, 225, 255, 0.3), rgba(255, 255, 255, 0));
+        }
+
+        .gift-layout {
+            width: min(100%, 460px);
+        }
+
+        .gift-interactive-area {
+            position: relative;
+            width: 100%;
+            min-height: 220px;
+            border: 0;
+            border-radius: 24px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            background:
+                radial-gradient(circle at 50% 32%, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0) 56%),
+                rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(214, 227, 255, 0.18);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+            isolation: isolate;
+            transition: transform 0.25s ease, box-shadow 0.25s ease;
+        }
+
+        .gift-interactive-area:hover,
+        .gift-interactive-area:focus-visible {
+            transform: translateY(-2px);
+            box-shadow: 0 16px 36px rgba(17, 18, 43, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+            outline: none;
+        }
+
+        .gift-interactive-area[disabled] {
+            cursor: default;
+            opacity: 0.88;
+        }
+
+        .gift-aura {
+            position: absolute;
+            inset: 28px;
+            border-radius: 24px;
+            background: radial-gradient(circle at center, rgba(165, 132, 255, 0.25), rgba(95, 150, 255, 0.06) 55%, rgba(255, 255, 255, 0) 72%);
+            filter: blur(6px);
+            pointer-events: none;
+        }
+
+        .gift-box-wrapper {
+            position: relative;
+            width: 124px;
+            height: 126px;
+            transform-origin: bottom center;
+            z-index: 2;
+        }
+
+        .gift-box {
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            width: 124px;
+            height: 92px;
+            border-radius: 20px;
+            background:
+                linear-gradient(160deg, rgba(249, 142, 201, 0.95), rgba(135, 115, 255, 0.94));
+            box-shadow:
+                0 20px 34px rgba(16, 12, 40, 0.36),
+                inset 0 1px 0 rgba(255, 255, 255, 0.28);
+        }
+
+        .gift-box::before,
+        .gift-box::after,
+        .gift-lid::before {
+            content: "";
+            position: absolute;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.75), rgba(226, 246, 255, 0.48));
+        }
+
+        .gift-box::before {
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 18px;
+            height: 100%;
+            border-radius: 999px;
+            box-shadow: 0 0 16px rgba(160, 228, 255, 0.3);
+        }
+
+        .gift-box::after {
+            top: 50%;
+            left: 0;
+            width: 100%;
+            height: 18px;
+            transform: translateY(-50%);
+        }
+
+        .gift-lid {
+            position: absolute;
+            left: -6px;
+            bottom: 88px;
+            width: 136px;
+            height: 30px;
+            border-radius: 20px;
+            background: linear-gradient(150deg, rgba(250, 153, 211, 0.98), rgba(110, 126, 255, 0.96));
+            box-shadow: 0 10px 24px rgba(15, 12, 36, 0.28);
+            transform-origin: 22px 100%;
+            transition: transform 0.92s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.8s ease;
+            z-index: 3;
+        }
+
+        .gift-lid::before {
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 18px;
+            height: 100%;
+            border-radius: 999px;
+        }
+
+        .gift-bow {
+            position: absolute;
+            left: 50%;
+            bottom: 112px;
+            width: 72px;
+            height: 32px;
+            transform: translateX(-50%);
+            transition: transform 0.92s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.8s ease;
+            z-index: 4;
+        }
+
+        .gift-bow::before,
+        .gift-bow::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            width: 34px;
+            height: 28px;
+            border-radius: 999px 999px 0 999px;
+            background: linear-gradient(135deg, rgba(238, 246, 255, 0.96), rgba(184, 226, 255, 0.76));
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.34);
+        }
+
+        .gift-bow::before {
+            left: 2px;
+            transform: rotate(-26deg);
+        }
+
+        .gift-bow::after {
+            right: 2px;
+            transform: scaleX(-1) rotate(-26deg);
+        }
+
+        .pulse-ring,
+        .pulse-ring::before {
+            position: absolute;
+            inset: auto;
+            border-radius: 50%;
+            pointer-events: none;
+        }
+
+        .pulse-ring {
+            width: 152px;
+            height: 152px;
+            border: 1px solid rgba(208, 230, 255, 0.42);
+            animation: pulseRing 2.1s infinite ease-out;
+            z-index: 1;
+        }
+
+        .pulse-ring::before {
+            content: "";
+            inset: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+        }
+
+        .light-burst {
+            position: absolute;
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            opacity: 0;
+            transform: scale(0.6);
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.92) 0%, rgba(216, 193, 255, 0.76) 24%, rgba(131, 211, 255, 0.22) 54%, rgba(255, 255, 255, 0) 76%);
+            filter: blur(8px);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .micro-copy {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            color: var(--text-subtle);
+            font-size: 12px;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+        }
+
+        .micro-copy span:last-child {
+            opacity: 0.72;
+        }
+
+        .gift-interactive-area.opening .gift-box-wrapper {
+            animation: giftShake 0.52s ease-in-out forwards;
+        }
+
+        .gift-interactive-area.opening .gift-lid,
+        .gift-interactive-area.opening .gift-bow {
+            transform: translate(-50%, -92px) rotate(-20deg) scale(1.08);
+            opacity: 0;
+        }
+
+        .gift-interactive-area.opening .gift-lid {
+            transform: translate(10px, -92px) rotate(-18deg) scale(1.08);
+        }
+
+        .gift-interactive-area.opening .light-burst {
+            animation: lightBurst 1.05s ease-out 0.48s forwards;
+        }
+
+        .gift-interactive-area.opening .pulse-ring {
+            animation: none;
+            opacity: 0;
+        }
+
+        .video-stage {
+            width: min(100%, 520px);
+            height: min(100%, 94vh);
+        }
+
+        .video-shell {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            padding: 12px;
+            border-radius: 34px;
+            background:
+                linear-gradient(160deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.05)),
+                rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(187, 219, 255, 0.26);
+            box-shadow: 0 28px 72px rgba(8, 10, 24, 0.54);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+
+        .video-shell::before {
+            content: "";
+            position: absolute;
+            inset: 10px;
+            border-radius: 26px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            pointer-events: none;
+        }
+
+        .video-shell video {
+            width: 100%;
+            height: 100%;
+            border-radius: 24px;
+            background: #020309;
+            object-fit: cover;
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+        }
+
+        .video-overlay {
+            position: absolute;
+            top: 26px;
+            left: 26px;
+            right: 26px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            pointer-events: none;
+        }
+
+        .overlay-pill {
+            min-height: 34px;
+            padding: 0 14px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(198, 221, 255, 0.22);
+            color: rgba(242, 246, 255, 0.86);
+            font-size: 12px;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .manual-play-overlay {
+            position: absolute;
+            inset: 12px;
+            border-radius: 24px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: rgba(5, 8, 18, 0.42);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+
+        .manual-play-button {
+            width: 88px;
+            height: 88px;
+            border: 0;
+            border-radius: 50%;
+            cursor: pointer;
+            color: #fff;
+            font-size: 34px;
+            background:
+                linear-gradient(135deg, rgba(171, 143, 255, 0.92), rgba(113, 188, 255, 0.92));
+            box-shadow: 0 16px 32px rgba(54, 92, 196, 0.42);
+        }
+
+        @keyframes pulseRing {
+            0% {
+                transform: scale(0.86);
+                opacity: 0.95;
+            }
+            100% {
+                transform: scale(1.42);
+                opacity: 0;
+            }
+        }
+
+        @keyframes giftShake {
+            0% { transform: rotate(0deg); }
+            14% { transform: rotate(5deg); }
+            28% { transform: rotate(-4deg); }
+            42% { transform: rotate(4deg); }
+            56% { transform: rotate(-3deg); }
+            70% { transform: rotate(2deg); }
+            100% { transform: rotate(0deg); }
+        }
+
+        @keyframes lightBurst {
+            0% {
+                opacity: 0;
+                transform: scale(0.5);
+            }
+            45% {
+                opacity: 1;
+                transform: scale(1.78);
+            }
+            100% {
+                opacity: 0;
+                transform: scale(2.5);
+            }
+        }
+
+        @media (min-width: 768px) and (max-width: 1023px) {
+            .screen {
+                padding: 32px;
+            }
+
+            .card-content {
+                padding: 30px;
+            }
+        }
+
+        @media (min-width: 1024px) {
+            .screen {
+                padding: 40px;
+            }
+
+            .glass-stack {
+                width: min(100%, 480px);
+            }
+
+            .video-stage {
+                width: min(100%, 560px);
+            }
+        }
+
+        @media (max-width: 767px) {
+            .screen {
+                padding: 18px;
+            }
+
+            .glass-stack {
+                width: 100%;
+            }
+
+            .card-content {
+                padding: 24px 20px;
+                gap: 18px;
+            }
+
+            .title-group h1 {
+                font-size: clamp(24px, 8vw, 34px);
+            }
+
+            .gift-interactive-area {
+                min-height: 210px;
+            }
+
+            .video-stage {
+                width: 100%;
+                height: min(100%, calc(100vh - 36px));
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="ambient-grid" aria-hidden="true"></div>
+
+    <div id="loading-screen" class="screen active">
+        <div class="glass-stack">
+            <section class="glass-card">
+                <div class="card-content">
+                    <div class="card-divider"></div>
+                    <div class="progress-wrapper" id="progress-wrapper">
+                        <div class="progress-meta">
+                            <span class="progress-label">Buffer</span>
+                            <span class="progress-text" id="progress-text">0%</span>
+                        </div>
+                        <div class="progress-bar-container">
+                            <div class="progress-bar-fill" id="progress-bar"></div>
+                        </div>
+                    </div>
+                    <div class="error-message" id="error-message">
+                        <div class="error-text" id="error-text">视频暂时无法进入通道，请稍后重试。</div>
+                        <button class="retry-btn" id="retry-btn" type="button">Retry</button>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <div id="gift-screen" class="screen">
+        <div class="glass-stack gift-layout">
+            <section class="glass-card">
+                <div class="card-content">
+                    <div class="top-line">
+                        <div class="brand-chip">Gift Vault</div>
+                        <div class="status-chip">Ready</div>
+                    </div>
+                    <form class="glass-form" novalidate>
+                        <label class="glass-field">
+                            <span class="field-dot"></span>
+                            <input type="text" value="Zack" readonly tabindex="-1">
+                        </label>
+                        <label class="glass-field">
+                            <span class="field-dot"></span>
+                            <input type="password" value="000000000000" readonly tabindex="-1">
+                        </label>
+                    </form>
+                    <button class="gift-interactive-area" id="gift-area" type="button" aria-label="Open Gift">
+                        <span class="gift-aura"></span>
+                        <span class="light-burst"></span>
+                        <span class="pulse-ring"></span>
+                        <span class="gift-box-wrapper">
+                            <span class="gift-box"></span>
+                            <span class="gift-lid"></span>
+                            <span class="gift-bow"></span>
+                        </span>
+                    </button>
+                    <div class="micro-copy">
+                        <span>Secure Entry</span>
+                        <span>Auto Play</span>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <div id="video-screen" class="screen">
+        <div class="video-stage">
+            <div class="video-shell" id="video-shell">
+                <video id="gift-video" playsinline webkit-playsinline x5-video-player-type="h5" x5-video-player-fullscreen="true"></video>
+                <div class="video-overlay" aria-hidden="true">
+                    <span class="overlay-pill">Vertical Video</span>
+                    <span class="overlay-pill">Glass Frame</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const defaultVideoUrl = "https://zackvideos.oss-cn-beijing.aliyuncs.com/copy_8438E825-01D3-45E8-AA25-39FF6019D90C.mov?OSSAccessKeyId=TMP.3KywktUdfHtvmCQUraL2scbb6gzvKBTgjLGjVLEkJHU4m2VncGBYnvGs8u1qS55dPGzSeWc3beRHZm59NceRfZxA9hRJeg&Expires=1779261921&Signature=QvyZKkXJkXgYhpzATC7HaPqDqno%3D";
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const videoUrl = urlParams.get("url") || defaultVideoUrl;
+
+            const loadingScreen = document.getElementById("loading-screen");
+            const giftScreen = document.getElementById("gift-screen");
+            const videoScreen = document.getElementById("video-screen");
+            const videoShell = document.getElementById("video-shell");
+
+            const progressBar = document.getElementById("progress-bar");
+            const progressText = document.getElementById("progress-text");
+            const progressWrapper = document.getElementById("progress-wrapper");
+            const errorMessage = document.getElementById("error-message");
+            const errorText = document.getElementById("error-text");
+            const retryBtn = document.getElementById("retry-btn");
+
+            const giftArea = document.getElementById("gift-area");
+            const videoEl = document.getElementById("gift-video");
+
+            let activeXhr = null;
+            let loadTimeout = null;
+            let fakeProgressTimer = null;
+            let fallbackProgress = 0;
+            let objectUrl = null;
+            let fallbackBound = false;
+            let isOpening = false;
+
+            videoEl.preload = "auto";
+
+            retryBtn.addEventListener("click", () => {
+                errorMessage.style.display = "none";
+                progressWrapper.style.display = "flex";
+                startLoading();
+            });
+
+            giftArea.addEventListener("click", () => {
+                if (isOpening) {
+                    return;
+                }
+
+                isOpening = true;
+                giftArea.disabled = true;
+                giftArea.classList.add("opening");
+
+                setTimeout(() => {
+                    playVideo();
+                }, 2000);
+            });
+
+            function startLoading() {
+                cleanupLoadingState();
+                resetVideoSource();
+                isOpening = false;
+                giftArea.disabled = false;
+                giftArea.classList.remove("opening");
+                loadingScreen.classList.add("active");
+                giftScreen.classList.remove("active");
+                videoScreen.classList.remove("active");
+                progressWrapper.style.display = "flex";
+                errorMessage.style.display = "none";
+                updateProgress(0);
+
+                loadTimeout = window.setTimeout(() => {
+                    if (activeXhr) {
+                        activeXhr.abort();
+                    }
+                    showError("加载超时，请检查网络后重试。");
+                }, 30000);
+
+                activeXhr = new XMLHttpRequest();
+                activeXhr.open("GET", videoUrl, true);
+                activeXhr.responseType = "blob";
+
+                activeXhr.onprogress = (event) => {
+                    if (event.lengthComputable && event.total > 0) {
+                        updateProgress((event.loaded / event.total) * 100);
+                        return;
+                    }
+
+                    const current = parseFloat(progressBar.style.width) || 0;
+                    if (current < 90) {
+                        updateProgress(current + (90 - current) * 0.08);
+                    }
+                };
+
+                activeXhr.onload = () => {
+                    if (activeXhr.status >= 200 && activeXhr.status < 300) {
+                        assignBlobSource(activeXhr.response);
+                        updateProgress(100);
+                        revealGiftScreen();
+                        return;
+                    }
+
+                    fallbackLoading();
+                };
+
+                activeXhr.onerror = fallbackLoading;
+                activeXhr.onabort = () => {
+                    activeXhr = null;
+                };
+
+                try {
+                    activeXhr.send();
+                } catch (error) {
+                    fallbackLoading();
+                }
+            }
+
+            function fallbackLoading() {
+                cleanupLoadingState(false);
+                bindFallbackEvents();
+                fallbackProgress = 0;
+                videoEl.src = videoUrl;
+                videoEl.load();
+
+                fakeProgressTimer = window.setInterval(() => {
+                    if (fallbackProgress < 86) {
+                        fallbackProgress += Math.random() * 4.2;
+                        updateProgress(fallbackProgress);
+                    }
+                }, 240);
+            }
+
+            function bindFallbackEvents() {
+                if (fallbackBound) {
+                    return;
+                }
+
+                videoEl.addEventListener("progress", handleVideoProgress);
+                videoEl.addEventListener("canplaythrough", handleVideoReady);
+                videoEl.addEventListener("loadeddata", handleVideoReady);
+                videoEl.addEventListener("error", handleVideoError);
+                fallbackBound = true;
+            }
+
+            function handleVideoProgress() {
+                if (!Number.isFinite(videoEl.duration) || videoEl.duration <= 0 || !videoEl.buffered.length) {
+                    return;
+                }
+
+                const bufferedEnd = videoEl.buffered.end(videoEl.buffered.length - 1);
+                const percent = (bufferedEnd / videoEl.duration) * 100;
+                if (percent > fallbackProgress) {
+                    fallbackProgress = percent;
+                    updateProgress(percent);
+                }
+            }
+
+            function handleVideoReady() {
+                updateProgress(100);
+                revealGiftScreen();
+            }
+
+            function handleVideoError() {
+                showError("视频格式不支持或加载失败，请更换链接后重试。");
+            }
+
+            function assignBlobSource(blob) {
+                resetVideoSource();
+                objectUrl = URL.createObjectURL(blob);
+                videoEl.src = objectUrl;
+                videoEl.load();
+            }
+
+            function resetVideoSource() {
+                if (objectUrl) {
+                    URL.revokeObjectURL(objectUrl);
+                    objectUrl = null;
+                }
+
+                videoEl.pause();
+                videoEl.removeAttribute("src");
+                videoEl.load();
+            }
+
+            function cleanupLoadingState(clearTimeoutToo = true) {
+                if (activeXhr) {
+                    activeXhr.onerror = null;
+                    activeXhr.onload = null;
+                    activeXhr.onprogress = null;
+                    activeXhr.onabort = null;
+                    activeXhr = null;
+                }
+
+                if (fakeProgressTimer) {
+                    window.clearInterval(fakeProgressTimer);
+                    fakeProgressTimer = null;
+                }
+
+                if (clearTimeoutToo && loadTimeout) {
+                    window.clearTimeout(loadTimeout);
+                    loadTimeout = null;
+                }
+            }
+
+            function updateProgress(percent) {
+                const value = Math.max(0, Math.min(100, percent));
+                progressBar.style.width = value + "%";
+                progressText.textContent = Math.round(value) + "%";
+            }
+
+            function showError(message) {
+                cleanupLoadingState();
+                progressWrapper.style.display = "none";
+                errorMessage.style.display = "flex";
+                errorText.textContent = message;
+            }
+
+            function revealGiftScreen() {
+                cleanupLoadingState();
+                window.setTimeout(() => {
+                    loadingScreen.classList.remove("active");
+                    giftScreen.classList.add("active");
+                }, 220);
+            }
+
+            function playVideo() {
+                giftScreen.classList.remove("active");
+                videoScreen.classList.add("active");
+
+                const playPromise = videoEl.play();
+                if (playPromise && typeof playPromise.catch === "function") {
+                    playPromise.catch(() => {
+                        createPlayButtonOverlay();
+                    });
+                }
+            }
+
+            function createPlayButtonOverlay() {
+                if (videoShell.querySelector(".manual-play-overlay")) {
+                    return;
+                }
+
+                const overlay = document.createElement("div");
+                overlay.className = "manual-play-overlay";
+
+                const playButton = document.createElement("button");
+                playButton.className = "manual-play-button";
+                playButton.type = "button";
+                playButton.setAttribute("aria-label", "Play video");
+                playButton.textContent = "▶";
+
+                playButton.addEventListener("click", () => {
+                    videoEl.play();
+                    overlay.remove();
+                });
+
+                overlay.appendChild(playButton);
+                videoShell.appendChild(overlay);
+            }
+
+          window.addEventListener("unload", () => {
+                cleanupLoadingState();
+                resetVideoSource();
+            });
+
+            startLoading();
+        });
+    </script>
+</body>
+</html>
