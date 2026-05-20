@@ -617,6 +617,30 @@
             box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
         }
 
+        .video-shell:fullscreen,
+        .video-shell:-webkit-full-screen {
+            width: 100vw;
+            height: 100vh;
+            padding: 0;
+            border-radius: 0;
+            border: 0;
+            box-shadow: none;
+            background: #000;
+            backdrop-filter: none;
+            -webkit-backdrop-filter: none;
+        }
+
+        .video-shell:fullscreen::before,
+        .video-shell:-webkit-full-screen::before {
+            display: none;
+        }
+
+        .video-shell:fullscreen video,
+        .video-shell:-webkit-full-screen video {
+            border-radius: 0;
+            box-shadow: none;
+        }
+
         .video-overlay {
             position: absolute;
             top: 26px;
@@ -878,6 +902,7 @@
             let objectUrl = null;
             let fallbackBound = false;
             let isOpening = false;
+            let lastVideoTapAt = 0;
 
             videoEl.preload = "auto";
 
@@ -900,6 +925,9 @@
                     playVideo();
                 }, 2000);
             });
+
+            videoShell.addEventListener("dblclick", handleVideoFullscreenGesture);
+            videoShell.addEventListener("touchend", handleVideoTouchEnd, { passive: true });
 
             function startLoading() {
                 cleanupLoadingState();
@@ -1072,11 +1100,55 @@
                 giftScreen.classList.remove("active");
                 videoScreen.classList.add("active");
 
+                playVideoInlineSafe();
+            }
+
+            async function handleVideoFullscreenGesture() {
+                await enterVideoFullscreen();
+                playVideoInlineSafe();
+            }
+
+            function handleVideoTouchEnd() {
+                const now = Date.now();
+                if (now - lastVideoTapAt <= 320) {
+                    lastVideoTapAt = 0;
+                    handleVideoFullscreenGesture();
+                    return;
+                }
+
+                lastVideoTapAt = now;
+            }
+
+            function playVideoInlineSafe() {
                 const playPromise = videoEl.play();
                 if (playPromise && typeof playPromise.catch === "function") {
                     playPromise.catch(() => {
                         createPlayButtonOverlay();
                     });
+                }
+            }
+
+            async function enterVideoFullscreen() {
+                if (document.fullscreenElement === videoShell || document.webkitFullscreenElement === videoShell) {
+                    return;
+                }
+
+                if (typeof videoShell.requestFullscreen === "function") {
+                    try {
+                        await videoShell.requestFullscreen();
+                        return;
+                    } catch (error) {
+                        // Fall through to video-specific fullscreen APIs.
+                    }
+                }
+
+                if (typeof videoShell.webkitRequestFullscreen === "function") {
+                    videoShell.webkitRequestFullscreen();
+                    return;
+                }
+
+                if (typeof videoEl.webkitEnterFullscreen === "function") {
+                    videoEl.webkitEnterFullscreen();
                 }
             }
 
@@ -1095,7 +1167,7 @@
                 playButton.textContent = "▶";
 
                 playButton.addEventListener("click", () => {
-                    videoEl.play();
+                    playVideoInlineSafe();
                     overlay.remove();
                 });
 
