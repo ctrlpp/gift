@@ -905,7 +905,6 @@
             let lastVideoTapAt = 0;
             let playbackStallTimer = null;
             let playbackResumeCheckTimer = null;
-            const videoUrlMeta = inspectVideoUrl(videoUrl);
 
             videoEl.preload = "auto";
             videoEl.addEventListener("playing", handlePlaybackResumed);
@@ -951,11 +950,6 @@
                 progressWrapper.style.display = "flex";
                 errorMessage.style.display = "none";
                 updateProgress(0);
-
-                if (videoUrlMeta.isExpired) {
-                    showError("视频链接已过期，请重新生成新的播放链接后再打开。");
-                    return;
-                }
 
                 loadTimeout = window.setTimeout(() => {
                     if (activeXhr) {
@@ -1005,11 +999,6 @@
 
             function fallbackLoading() {
                 cleanupLoadingState(false);
-                if (videoUrlMeta.isTemporarySigned) {
-                    showError("当前视频链接是临时签名地址，预加载失败后会在链接过期时卡住。请换一个新的链接，或允许页面先完整下载视频。");
-                    return;
-                }
-
                 bindFallbackEvents();
                 fallbackProgress = 0;
                 videoEl.src = videoUrl;
@@ -1172,11 +1161,6 @@
                             return;
                         }
 
-                        if (videoUrlMeta.isTemporarySigned) {
-                            showError("视频链接在播放过程中失效了，请刷新页面并使用新的播放链接。");
-                            return;
-                        }
-
                         showError("视频播放中断，请点击重试或刷新页面后再试。");
                     }, 2200);
                 }, 900);
@@ -1195,23 +1179,6 @@
                 if (playbackResumeCheckTimer) {
                     window.clearTimeout(playbackResumeCheckTimer);
                     playbackResumeCheckTimer = null;
-                }
-            }
-
-            function inspectVideoUrl(rawUrl) {
-                try {
-                    const parsed = new URL(rawUrl, window.location.href);
-                    const expires = parsed.searchParams.get("Expires");
-                    const expiresAt = expires ? Number(expires) * 1000 : null;
-                    return {
-                        isTemporarySigned: parsed.searchParams.has("Expires") || parsed.searchParams.has("Signature") || parsed.searchParams.has("OSSAccessKeyId"),
-                        isExpired: Number.isFinite(expiresAt) ? expiresAt <= Date.now() : false
-                    };
-                } catch (error) {
-                    return {
-                        isTemporarySigned: false,
-                        isExpired: false
-                    };
                 }
             }
 
