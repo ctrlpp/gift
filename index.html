@@ -617,6 +617,15 @@
             box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
         }
 
+        .video-shell iframe {
+            width: 100%;
+            height: 100%;
+            border: 0;
+            border-radius: 24px;
+            background: #020309;
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+        }
+
         .video-shell:fullscreen,
         .video-shell:-webkit-full-screen {
             width: 100vw;
@@ -637,6 +646,12 @@
 
         .video-shell:fullscreen video,
         .video-shell:-webkit-full-screen video {
+            border-radius: 0;
+            box-shadow: none;
+        }
+
+        .video-shell:fullscreen iframe,
+        .video-shell:-webkit-full-screen iframe {
             border-radius: 0;
             box-shadow: none;
         }
@@ -865,6 +880,7 @@
         <div class="video-stage">
             <div class="video-shell" id="video-shell">
                 <video id="gift-video" playsinline webkit-playsinline x5-video-player-type="h5" x5-video-player-fullscreen="true"></video>
+                <iframe id="bilibili-player" scrolling="no" frameborder="no" allowfullscreen="false" style="display:none;"></iframe>
                 <div class="video-overlay" aria-hidden="true">
                     <span class="overlay-pill">Zack</span>
                     <span class="overlay-pill">Frame</span>
@@ -875,10 +891,16 @@
 
     <script>
         document.addEventListener("DOMContentLoaded", () => {
-            const defaultVideoUrl = "https://outin-37235f6a55c111f19ca800163e31db23.oss-cn-shanghai.aliyuncs.com/sv/2d5f31f-19e4f0c2584/2d5f31f-19e4f0c2584.mp4?Expires=1779446321&OSSAccessKeyId=LTAI8bKSZ6dKjf44&Signature=SPWMvHFGf0Y%2FJtrBmJOyoloDnAY%3D";
+            const defaultVideoUrl = "http://cdn.czk.ai/o422FCsQte0JSRhUuJxCOWTQ4qSt9AgNmAi1JI?auth_key=1779518073-eda39b933876406f8559f464e9298946-0-0517a5be7e29206afc6e92583ade6a07";
+            const defaultBilibiliSrc = "//player.bilibili.com/player.html?isOutside=true&aid=116619334455100&bvid=BV1ZeGa6pEwX&cid=38537398335&p=1&autoplay=true&quality=1080p&danmaku=0&muted=0";
 
             const urlParams = new URLSearchParams(window.location.search);
-            const videoUrl = urlParams.get("url") || defaultVideoUrl;
+            const rawBilibiliSrc = urlParams.get("bilibili");
+            const rawVideoUrl = urlParams.get("url");
+            const isBilibiliMode = Boolean(rawBilibiliSrc) && !rawVideoUrl;
+            const isMp4Mode = Boolean(rawVideoUrl) || !isBilibiliMode;
+            const videoUrl = isMp4Mode ? (rawVideoUrl || defaultVideoUrl) : defaultVideoUrl;
+            const bilibiliSrc = normalizeBilibiliSrc(rawBilibiliSrc || defaultBilibiliSrc);
 
             const loadingScreen = document.getElementById("loading-screen");
             const giftScreen = document.getElementById("gift-screen");
@@ -894,13 +916,13 @@
 
             const giftArea = document.getElementById("gift-area");
             const videoEl = document.getElementById("gift-video");
+            const bilibiliFrame = document.getElementById("bilibili-player");
 
-            let activeXhr = null;
             let loadTimeout = null;
             let fakeProgressTimer = null;
-            let fallbackProgress = 0;
-            let objectUrl = null;
-            let fallbackBound = false;
+            let loadPollTimer = null;
+            let bufferedProgress = 0;
+            let loadingBound = false;
             let isOpening = false;
             let lastVideoTapAt = 0;
 
@@ -941,138 +963,146 @@
                 progressWrapper.style.display = "flex";
                 errorMessage.style.display = "none";
                 updateProgress(0);
+                bufferedProgress = 0;
 
-                loadTimeout = window.setTimeout(() => {
-                    if (activeXhr) {
-                        activeXhr.abort();
-                    }
-                    showError("加载超时，请检查网络后重试。");
-                }, 30000);
-
-                activeXhr = new XMLHttpRequest();
-                activeXhr.open("GET", videoUrl, true);
-                activeXhr.responseType = "blob";
-
-                activeXhr.onprogress = (event) => {
-                    if (event.lengthComputable && event.total > 0) {
-                        updateProgress((event.loaded / event.total) * 100);
-                        return;
-                    }
-
-                    const current = parseFloat(progressBar.style.width) || 0;
-                    if (current < 90) {
-                        updateProgress(current + (90 - current) * 0.08);
-                    }
-                };
-
-                activeXhr.onload = () => {
-                    if (activeXhr.status >= 200 && activeXhr.status < 300) {
-                        assignBlobSource(activeXhr.response);
-                        updateProgress(100);
-                        revealGiftScreen();
-                        return;
-                    }
-
-                    fallbackLoading();
-                };
-
-                activeXhr.onerror = fallbackLoading;
-                activeXhr.onabort = () => {
-                    activeXhr = null;
-                };
-
-                try {
-                    activeXhr.send();
-                } catch (error) {
-                    fallbackLoading();
+                if (isBilibiliMode) {
+                    updateProgress(100);
+                    revealGiftScreen();
+                    return;
                 }
-            }
 
-            function fallbackLoading() {
-                cleanupLoadingState(false);
-                bindFallbackEvents();
-                fallbackProgress = 0;
+                bindLoadingEvents();
+                startFakeProgress();
                 videoEl.src = videoUrl;
                 videoEl.load();
 
-                fakeProgressTimer = window.setInterval(() => {
-                    if (fallbackProgress < 86) {
-                        fallbackProgress += Math.random() * 4.2;
-                        updateProgress(fallbackProgress);
-                    }
-                }, 240);
-            }
-
-            function bindFallbackEvents() {
-                if (fallbackBound) {
-                    return;
-                }
-
-                videoEl.addEventListener("progress", handleVideoProgress);
-                videoEl.addEventListener("canplaythrough", handleVideoReady);
-                videoEl.addEventListener("loadeddata", handleVideoReady);
-                videoEl.addEventListener("error", handleVideoError);
-                fallbackBound = true;
-            }
-
-            function handleVideoProgress() {
-                if (!Number.isFinite(videoEl.duration) || videoEl.duration <= 0 || !videoEl.buffered.length) {
-                    return;
-                }
-
-                const bufferedEnd = videoEl.buffered.end(videoEl.buffered.length - 1);
-                const percent = (bufferedEnd / videoEl.duration) * 100;
-                if (percent > fallbackProgress) {
-                    fallbackProgress = percent;
-                    updateProgress(percent);
-                }
-            }
-
-            function handleVideoReady() {
-                updateProgress(100);
-                revealGiftScreen();
-            }
-
-            function handleVideoError() {
-                showError("视频格式不支持或加载失败，请更换链接后重试。");
-            }
-
-            function assignBlobSource(blob) {
-                resetVideoSource();
-                objectUrl = URL.createObjectURL(blob);
-                videoEl.src = objectUrl;
-                videoEl.load();
+                loadTimeout = window.setTimeout(() => {
+                    showError("加载超时，请检查网络后重试。");
+                }, 30000);
             }
 
             function resetVideoSource() {
-                if (objectUrl) {
-                    URL.revokeObjectURL(objectUrl);
-                    objectUrl = null;
-                }
-
                 videoEl.pause();
                 videoEl.removeAttribute("src");
                 videoEl.load();
+                bilibiliFrame.removeAttribute("src");
+                bilibiliFrame.style.display = "none";
+                videoEl.style.display = "";
             }
 
-            function cleanupLoadingState(clearTimeoutToo = true) {
-                if (activeXhr) {
-                    activeXhr.onerror = null;
-                    activeXhr.onload = null;
-                    activeXhr.onprogress = null;
-                    activeXhr.onabort = null;
-                    activeXhr = null;
-                }
-
+            function cleanupLoadingState() {
                 if (fakeProgressTimer) {
                     window.clearInterval(fakeProgressTimer);
                     fakeProgressTimer = null;
                 }
 
-                if (clearTimeoutToo && loadTimeout) {
+                if (loadPollTimer) {
+                    window.clearInterval(loadPollTimer);
+                    loadPollTimer = null;
+                }
+
+                if (loadTimeout) {
                     window.clearTimeout(loadTimeout);
                     loadTimeout = null;
                 }
+            }
+
+            function bindLoadingEvents() {
+                if (loadingBound) {
+                    return;
+                }
+
+                videoEl.addEventListener("progress", handleLoadingProgress);
+                videoEl.addEventListener("loadedmetadata", handleLoadingProgress);
+                videoEl.addEventListener("canplay", checkReadyAndReveal);
+                videoEl.addEventListener("canplaythrough", checkReadyAndReveal);
+                videoEl.addEventListener("loadeddata", checkReadyAndReveal);
+                videoEl.addEventListener("error", handleLoadingError);
+                loadingBound = true;
+            }
+
+            function startFakeProgress() {
+                if (fakeProgressTimer) {
+                    return;
+                }
+
+                fakeProgressTimer = window.setInterval(() => {
+                    if (Number.isFinite(videoEl.duration) && videoEl.duration > 0) {
+                        window.clearInterval(fakeProgressTimer);
+                        fakeProgressTimer = null;
+                        return;
+                    }
+
+                    const current = parseFloat(progressBar.style.width) || 0;
+                    if (current < 30) {
+                        updateProgress(current + (30 - current) * 0.08);
+                    }
+                }, 240);
+
+                if (!loadPollTimer) {
+                    loadPollTimer = window.setInterval(() => {
+                        handleLoadingProgress();
+                        checkReadyAndReveal();
+                    }, 250);
+                }
+            }
+
+            function getBufferedEnd() {
+                if (!videoEl.buffered || !videoEl.buffered.length) {
+                    return 0;
+                }
+                return videoEl.buffered.end(videoEl.buffered.length - 1);
+            }
+
+            function handleLoadingProgress() {
+                if (fakeProgressTimer && Number.isFinite(videoEl.duration) && videoEl.duration > 0) {
+                    window.clearInterval(fakeProgressTimer);
+                    fakeProgressTimer = null;
+                }
+
+                if (!Number.isFinite(videoEl.duration) || videoEl.duration <= 0) {
+                    return;
+                }
+
+                const bufferedEnd = getBufferedEnd();
+                const percent = (bufferedEnd / videoEl.duration) * 100;
+                if (!Number.isFinite(percent) || percent <= bufferedProgress) {
+                    return;
+                }
+
+                bufferedProgress = percent;
+                updateProgress(Math.min(95, percent));
+            }
+
+            function isReadyToReveal() {
+                if (videoEl.readyState < 3) {
+                    return false;
+                }
+
+                if (!Number.isFinite(videoEl.duration) || videoEl.duration <= 0) {
+                    return true;
+                }
+
+                const bufferedEnd = getBufferedEnd();
+                const requiredSeconds = Math.min(20, Math.max(8, videoEl.duration * 0.08));
+                return bufferedEnd >= requiredSeconds || bufferedEnd / videoEl.duration >= 0.15;
+            }
+
+            function checkReadyAndReveal() {
+                if (!loadingScreen.classList.contains("active")) {
+                    return;
+                }
+
+                if (!isReadyToReveal()) {
+                    return;
+                }
+
+                updateProgress(100);
+                revealGiftScreen();
+            }
+
+            function handleLoadingError() {
+                showError("视频格式不支持或加载失败，请更换链接后重试。");
             }
 
             function updateProgress(percent) {
@@ -1100,6 +1130,19 @@
                 giftScreen.classList.remove("active");
                 videoScreen.classList.add("active");
 
+                if (isBilibiliMode) {
+                    videoEl.pause();
+                    videoEl.style.display = "none";
+                    bilibiliFrame.style.display = "";
+                    if (bilibiliFrame.getAttribute("src") !== bilibiliSrc) {
+                        bilibiliFrame.setAttribute("src", bilibiliSrc);
+                    }
+                    return;
+                }
+
+                bilibiliFrame.style.display = "none";
+                bilibiliFrame.removeAttribute("src");
+                videoEl.style.display = "";
                 playVideoInlineSafe();
             }
 
@@ -1120,6 +1163,9 @@
             }
 
             function playVideoInlineSafe() {
+                if (isBilibiliMode) {
+                    return;
+                }
                 const playPromise = videoEl.play();
                 if (playPromise && typeof playPromise.catch === "function") {
                     playPromise.catch(() => {
@@ -1153,6 +1199,9 @@
             }
 
             function createPlayButtonOverlay() {
+                if (isBilibiliMode) {
+                    return;
+                }
                 if (videoShell.querySelector(".manual-play-overlay")) {
                     return;
                 }
@@ -1179,6 +1228,23 @@
                 cleanupLoadingState();
                 resetVideoSource();
             });
+
+            /**
+             * Normalizes bilibili player URLs so protocol-relative values can be passed via query.
+             */
+            function normalizeBilibiliSrc(value) {
+                const trimmed = (value || "").trim();
+                if (!trimmed) {
+                    return "";
+                }
+                if (trimmed.startsWith("//")) {
+                    return "https:" + trimmed;
+                }
+                if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+                    return trimmed;
+                }
+                return "https://" + trimmed;
+            }
 
             startLoading();
         });
