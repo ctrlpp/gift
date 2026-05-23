@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Gift For You</title>
+    <link rel="icon" type="image/x-icon" href="./favor.ico">
     <style>
         :root {
             --bg-dark: #0b1020;
@@ -901,6 +902,8 @@
             const isMp4Mode = Boolean(rawVideoUrl) || !isBilibiliMode;
             const videoUrl = isMp4Mode ? (rawVideoUrl || defaultVideoUrl) : defaultVideoUrl;
             const bilibiliSrc = normalizeBilibiliSrc(rawBilibiliSrc || defaultBilibiliSrc);
+            const isWechatBrowser = detectWeChatBrowser();
+            const loadingStrategy = getLoadingStrategy(isWechatBrowser);
 
             const loadingScreen = document.getElementById("loading-screen");
             const giftScreen = document.getElementById("gift-screen");
@@ -921,14 +924,19 @@
             let loadTimeout = null;
             let fakeProgressTimer = null;
             let loadPollTimer = null;
+            let pendingRetryTimer = null;
             let bufferedProgress = 0;
             let loadingBound = false;
             let isOpening = false;
             let lastVideoTapAt = 0;
+            let loadingStartedAt = 0;
+            let metadataLoaded = false;
+            let autoRetryUsed = false;
 
-            videoEl.preload = "auto";
+            videoEl.preload = loadingStrategy.preload;
 
             retryBtn.addEventListener("click", () => {
+                autoRetryUsed = false;
                 errorMessage.style.display = "none";
                 progressWrapper.style.display = "flex";
                 startLoading();
@@ -951,6 +959,9 @@
             videoShell.addEventListener("dblclick", handleVideoFullscreenGesture);
             videoShell.addEventListener("touchend", handleVideoTouchEnd, { passive: true });
 
+            /**
+             * Starts the initial media loading flow with browser-specific thresholds.
+             */
             function startLoading() {
                 cleanupLoadingState();
                 resetVideoSource();
@@ -964,6 +975,8 @@
                 errorMessage.style.display = "none";
                 updateProgress(0);
                 bufferedProgress = 0;
+                loadingStartedAt = Date.now();
+                metadataLoaded = false;
 
                 if (isBilibiliMode) {
                     updateProgress(100);
@@ -977,8 +990,8 @@
                 videoEl.load();
 
                 loadTimeout = window.setTimeout(() => {
-                    showError("加载超时，请检查网络后重试。");
-                }, 30000);
+                    handleLoadingFailure("加载超时，请检查网络后重试。");
+                }, loadingStrategy.timeoutMs);
             }
 
             function resetVideoSource() {
@@ -990,6 +1003,9 @@
                 videoEl.style.display = "";
             }
 
+            /**
+             * Clears all timers related to the current loading attempt.
+             */
             function cleanupLoadingState() {
                 if (fakeProgressTimer) {
                     window.clearInterval(fakeProgressTimer);
@@ -1005,15 +1021,23 @@
                     window.clearTimeout(loadTimeout);
                     loadTimeout = null;
                 }
+
+                if (pendingRetryTimer) {
+                    window.clearTimeout(pendingRetryTimer);
+                    pendingRetryTimer = null;
+                }
             }
 
+            /**
+             * Binds video loading events once so subsequent retries reuse the same listeners.
+             */
             function bindLoadingEvents() {
                 if (loadingBound) {
                     return;
                 }
 
                 videoEl.addEventListener("progress", handleLoadingProgress);
-                videoEl.addEventListener("loadedmetadata", handleLoadingProgress);
+                videoEl.addEventListener("loadedmetadata", handleLoadedMetadata);
                 videoEl.addEventListener("canplay", checkReadyAndReveal);
                 videoEl.addEventListener("canplaythrough", checkReadyAndReveal);
                 videoEl.addEventListener("loadeddata", checkReadyAndReveal);
@@ -1021,6 +1045,18 @@
                 loadingBound = true;
             }
 
+            /**
+             * Marks metadata readiness so WeChat can reveal earlier without waiting for deep buffering.
+             */
+            function handleLoadedMetadata() {
+                metadataLoaded = true;
+                handleLoadingProgress();
+                checkReadyAndReveal();
+            }
+
+            /**
+             * Advances the loading UI before accurate buffered ranges become available.
+             */
             function startFakeProgress() {
                 if (fakeProgressTimer) {
                     return;
@@ -1034,8 +1070,8 @@
                     }
 
                     const current = parseFloat(progressBar.style.width) || 0;
-                    if (current < 30) {
-                        updateProgress(current + (30 - current) * 0.08);
+                    if (current < loadingStrategy.initialProgressCap) {
+                        updateProgress(current + (loadingStrategy.initialProgressCap - current) * 0.08);
                     }
                 }, 240);
 
@@ -1054,6 +1090,9 @@
                 return videoEl.buffered.end(videoEl.buffered.length - 1);
             }
 
+            /**
+             * Syncs the visible progress with the buffered media range without moving backward.
+             */
             function handleLoadingProgress() {
                 if (fakeProgressTimer && Number.isFinite(videoEl.duration) && videoEl.duration > 0) {
                     window.clearInterval(fakeProgressTimer);
@@ -1066,26 +1105,42 @@
 
                 const bufferedEnd = getBufferedEnd();
                 const percent = (bufferedEnd / videoEl.duration) * 100;
-                if (!Number.isFinite(percent) || percent <= bufferedProgress) {
+                const current = parseFloat(progressBar.style.width) || 0;
+                const nextProgress = Math.min(loadingStrategy.progressCeiling, Math.max(current, percent));
+                if (!Number.isFinite(nextProgress) || nextProgress <= bufferedProgress) {
                     return;
                 }
 
-                bufferedProgress = percent;
-                updateProgress(Math.min(95, percent));
+                bufferedProgress = nextProgress;
+                updateProgress(nextProgress);
             }
 
+            /**
+             * Decides when the user can continue based on browser-specific buffering rules.
+             */
             function isReadyToReveal() {
-                if (videoEl.readyState < 3) {
+                if (videoEl.readyState < loadingStrategy.minimumReadyState) {
                     return false;
                 }
 
                 if (!Number.isFinite(videoEl.duration) || videoEl.duration <= 0) {
-                    return true;
+                    return metadataLoaded || videoEl.readyState >= 2;
                 }
 
                 const bufferedEnd = getBufferedEnd();
-                const requiredSeconds = Math.min(20, Math.max(8, videoEl.duration * 0.08));
-                return bufferedEnd >= requiredSeconds || bufferedEnd / videoEl.duration >= 0.15;
+                const requiredSeconds = isWechatBrowser
+                    ? Math.min(6, Math.max(2, videoEl.duration * 0.03))
+                    : Math.min(20, Math.max(8, videoEl.duration * 0.08));
+                const bufferedRatio = bufferedEnd / videoEl.duration;
+                if (bufferedEnd >= requiredSeconds || bufferedRatio >= loadingStrategy.requiredRatio) {
+                    return true;
+                }
+
+                if (!isWechatBrowser || !metadataLoaded) {
+                    return false;
+                }
+
+                return Date.now() - loadingStartedAt >= loadingStrategy.metadataGraceMs;
             }
 
             function checkReadyAndReveal() {
@@ -1101,8 +1156,31 @@
                 revealGiftScreen();
             }
 
+            /**
+             * Performs a single automatic retry in WeChat before showing a hard failure.
+             */
+            function handleLoadingFailure(message) {
+                if (isWechatBrowser && isMp4Mode && !autoRetryUsed) {
+                    autoRetryUsed = true;
+                    cleanupLoadingState();
+                    progressWrapper.style.display = "flex";
+                    errorMessage.style.display = "none";
+                    updateProgress(Math.max(parseFloat(progressBar.style.width) || 0, 18));
+                    progressText.textContent = "网络波动，正在重试...";
+                    pendingRetryTimer = window.setTimeout(() => {
+                        startLoading();
+                    }, loadingStrategy.retryDelayMs);
+                    return;
+                }
+
+                showError(message);
+            }
+
+            /**
+             * Converts native video element errors into the shared loading failure flow.
+             */
             function handleLoadingError() {
-                showError("视频格式不支持或加载失败，请更换链接后重试。");
+                handleLoadingFailure("视频格式不支持或加载失败，请更换链接后重试。");
             }
 
             function updateProgress(percent) {
@@ -1244,6 +1322,42 @@
                     return trimmed;
                 }
                 return "https://" + trimmed;
+            }
+
+            /**
+             * Detects whether the current page is running inside WeChat's embedded browser.
+             */
+            function detectWeChatBrowser() {
+                return /MicroMessenger/i.test(navigator.userAgent || "");
+            }
+
+            /**
+             * Returns loading thresholds tuned for either WeChat or regular browsers.
+             */
+            function getLoadingStrategy(isWechat) {
+                if (isWechat) {
+                    return {
+                        preload: "metadata",
+                        timeoutMs: 45000,
+                        initialProgressCap: 55,
+                        progressCeiling: 92,
+                        minimumReadyState: 2,
+                        requiredRatio: 0.05,
+                        metadataGraceMs: 4000,
+                        retryDelayMs: 900
+                    };
+                }
+
+                return {
+                    preload: "auto",
+                    timeoutMs: 30000,
+                    initialProgressCap: 30,
+                    progressCeiling: 95,
+                    minimumReadyState: 3,
+                    requiredRatio: 0.15,
+                    metadataGraceMs: 0,
+                    retryDelayMs: 0
+                };
             }
 
             startLoading();
